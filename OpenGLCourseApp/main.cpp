@@ -3,7 +3,11 @@
 #include <iostream>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
+//#include <glm/glm.hpp>
+//#include <glm/gtc/matrix_transform.hpp>
+//#include <glm/gtc/type_ptr.hpp>
 #include <string>
+
 
 // Window dimensions
 const GLint WIDTH = 800, HEIGHT = 600;
@@ -15,18 +19,28 @@ const GLint WIDTH = 800, HEIGHT = 600;
 #define PURE_BLACK 0.0f,0.0f,0.0f,1.0f
 
 
-GLuint VAO, VBO, shader;
+GLuint hVAO, hVBO, hShader, hUniformModel;
+
+bool direction = true;
+float triOffset = 0.0f;
+float triMaxOffset = 0.7f;
+float triIncrement = 0.0005f;
 
 
 // Vertex Shader defined as string
 static const char* vShader = 
 "                                                           \n\
 #version 330                                                \n\
+                                                            \n\
 layout (location = 0) in vec3 pos;                          \n\
+                                                            \n\
+uniform float xMove;                                        \n\
+                                                            \n\
 void main()                                                 \n\
 {                                                           \n\
-    gl_Position = vec4(pos,1.0);  \n\
-}                                                           \n\
+    float scale = 0.4f;                                                         \n\
+    gl_Position = vec4(scale*pos.x + xMove, scale*pos.y, scale*pos.z, 1.0);     \n\
+}                                                                               \n\
 ";
 
 // Fragment shader
@@ -51,13 +65,13 @@ void CreateTriangle()
     };
 
     // Vertex array object created on the graphics card
-    glGenVertexArrays(1, &VAO);
+    glGenVertexArrays(1, &hVAO);
     // Bind the VAO
-    glBindVertexArray(VAO);
+    glBindVertexArray(hVAO);
     {
         // Create 1 vertex buffer object
-        glGenBuffers(1, &VBO);
-        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glGenBuffers(1, &hVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, hVBO);
         {
             glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices, GL_STATIC_DRAW); // Static draw means-> data is not changes (alt. GL_DYNAMIC_DARW)
 
@@ -109,43 +123,50 @@ void AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
 void CompileShaders() 
 {
     // Creating the program
-    shader = glCreateProgram();
-    if (!shader)
+    hShader = glCreateProgram();
+    if (!hShader)
     {
         std::cout << "Error creating shader program!" << std::endl;
         return;
     }
 
     // Adding the shaders
-    AddShader(shader, vShader, GL_VERTEX_SHADER);
-    AddShader(shader, fShader, GL_FRAGMENT_SHADER);
+    AddShader(hShader, vShader, GL_VERTEX_SHADER);
+    AddShader(hShader, fShader, GL_FRAGMENT_SHADER);
 
     // Validate the shader
     GLint result = 0;
     GLchar eLog[1024] = { 0 };
     // Link program on the graphics card
-    glLinkProgram(shader);
-    glGetProgramiv(shader, GL_LINK_STATUS, &result);
+    glLinkProgram(hShader);
+    glGetProgramiv(hShader, GL_LINK_STATUS, &result);
     if (!result)
     {
-        glGetProgramInfoLog(shader, sizeof(eLog), NULL, eLog);
+        glGetProgramInfoLog(hShader, sizeof(eLog), NULL, eLog);
         std::cout << "Error linking program: " << eLog << std::endl;
         return;
     }
 
-    glValidateProgram(shader);
-    glGetProgramiv(shader, GL_VALIDATE_STATUS, &result);
+    glValidateProgram(hShader);
+    glGetProgramiv(hShader, GL_VALIDATE_STATUS, &result);
     if (!result)
     {
-        glGetProgramInfoLog(shader, sizeof(eLog), NULL, eLog);
+        glGetProgramInfoLog(hShader, sizeof(eLog), NULL, eLog);
         std::cout << "Error validating program: " << eLog << std::endl;
         return;
     }
+
+
+    // Get a handle on the 
+    hUniformModel = glGetUniformLocation(hShader, "xMove");
 }
 
 
 
-
+void DeleteShaders()
+{
+    glDeleteProgram(hShader);
+}
 
 
 int main()
@@ -205,15 +226,33 @@ int main()
         // Get and Handle user input events
         glfwPollEvents();
 
+        if (direction)
+        {
+            triOffset += triIncrement;
+        }
+        else
+        {
+            triOffset -= triIncrement;
+        }
+
+        if (std::abs(triOffset) >= triMaxOffset)
+        {
+            direction = !direction;
+        }
+
         // Clear Window
         glClearColor(PURE_BLACK);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Choose the program
-        glUseProgram(shader);
+        glUseProgram(hShader);
         {
+
+            // Pass value to the uniform variable
+            glUniform1f(hUniformModel, triOffset);
+
             // Choose the vertex array
-            glBindVertexArray(VAO);
+            glBindVertexArray(hVAO);
             {
                 glDrawArrays(GL_TRIANGLES, 0, 3);
             }
@@ -223,6 +262,8 @@ int main()
 
         glfwSwapBuffers(mainWindow);
     }
+
+    DeleteShaders();
 
     return 0;
 }
