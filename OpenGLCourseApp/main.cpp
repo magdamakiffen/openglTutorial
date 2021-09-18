@@ -3,9 +3,9 @@
 #include <iostream>
 #include <GL/glew.h>
 #include <GLFW/glfw3.h>
-//#include <glm/glm.hpp>
-//#include <glm/gtc/matrix_transform.hpp>
-//#include <glm/gtc/type_ptr.hpp>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtc/type_ptr.hpp>
 #include <string>
 
 
@@ -25,7 +25,9 @@ bool direction = true;
 float triOffset = 0.0f;
 float triMaxOffset = 0.7f;
 float triIncrement = 0.0005f;
+constexpr float toRadian = glm::pi<float>() / 180.0f;
 
+float curAngle = 0.0f;
 
 // Vertex Shader defined as string
 static const char* vShader = 
@@ -34,12 +36,12 @@ static const char* vShader =
                                                             \n\
 layout (location = 0) in vec3 pos;                          \n\
                                                             \n\
-uniform float xMove;                                        \n\
+uniform mat4 model;                                         \n\
                                                             \n\
 void main()                                                 \n\
 {                                                           \n\
     float scale = 0.4f;                                                         \n\
-    gl_Position = vec4(scale*pos.x + xMove, scale*pos.y, scale*pos.z, 1.0);     \n\
+    gl_Position = model * vec4(scale*pos.x, scale*pos.y, scale*pos.z, 1.0);     \n\
 }                                                                               \n\
 ";
 
@@ -158,7 +160,7 @@ void CompileShaders()
 
 
     // Get a handle on the 
-    hUniformModel = glGetUniformLocation(hShader, "xMove");
+    hUniformModel = glGetUniformLocation(hShader, "model");
 }
 
 
@@ -240,6 +242,12 @@ int main()
             direction = !direction;
         }
 
+        curAngle += 0.01f;
+        if (curAngle >= 360.0f)
+        {
+            curAngle -= 360.0f;
+        }
+
         // Clear Window
         glClearColor(PURE_BLACK);
         glClear(GL_COLOR_BUFFER_BIT);
@@ -247,9 +255,12 @@ int main()
         // Choose the program
         glUseProgram(hShader);
         {
+            glm::mat4 model{ 1.0f };
+            model = glm::translate(model, glm::vec3(triOffset, 0.0f, 0.0f));
+            model = glm::rotate(model, curAngle * toRadian, glm::vec3(0.0f, 0.0f, 1.0f));
 
             // Pass value to the uniform variable
-            glUniform1f(hUniformModel, triOffset);
+            glUniformMatrix4fv(hUniformModel, 1, GL_FALSE, glm::value_ptr(model));
 
             // Choose the vertex array
             glBindVertexArray(hVAO);
