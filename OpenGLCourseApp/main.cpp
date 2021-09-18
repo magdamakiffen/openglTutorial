@@ -7,6 +7,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <string>
+#include <vector>
 
 
 // Window dimensions
@@ -19,7 +20,7 @@ const GLint WIDTH = 800, HEIGHT = 600;
 #define PURE_BLACK 0.0f,0.0f,0.0f,1.0f
 
 
-GLuint hVAO, hVBO, hShader, hUniformModel;
+GLuint hVAO, hVBO, hUniformModel;
 
 bool direction = true;
 float triOffset = 0.0f;
@@ -29,8 +30,13 @@ constexpr float toRadian = glm::pi<float>() / 180.0f;
 
 float curAngle = 0.0f;
 
+bool sizeDirection = true;
+float curSize = 0.4f;
+float maxSize = 0.8f;
+float minSize = 0.1f;
+
 // Vertex Shader defined as string
-static const char* vShader = 
+static const char* hVertexShader = 
 "                                                           \n\
 #version 330                                                \n\
                                                             \n\
@@ -40,20 +46,19 @@ uniform mat4 model;                                         \n\
                                                             \n\
 void main()                                                 \n\
 {                                                           \n\
-    float scale = 0.4f;                                                         \n\
-    gl_Position = model * vec4(scale*pos.x, scale*pos.y, scale*pos.z, 1.0);     \n\
-}                                                                               \n\
+    gl_Position = model * vec4(pos, 1.0);                   \n\
+}                                                           \n\
 ";
 
 // Fragment shader
 // The output will be interpreted as the color of the fragment
-static const char* fShader =
+static const char* hFragmentShader =
 "                                                           \n\
 #version 330                                                \n\
 out vec4 colour;                                            \n\
 void main()                                                 \n\
 {                                                           \n\
-    colour = vec4(1.0,0.0,0.0,1.0);                         \n\
+    colour = vec4(1.0,0.0,1.0,1.0);                         \n\
 }                                                           \n\
 ";
 
@@ -108,12 +113,15 @@ void AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
 
     // Check compile errors
     GLint result = 0;
-    GLchar eLog[1024] = { 0 };
     glGetShaderiv(theShader, GL_COMPILE_STATUS, &result);
     if (!result)
     {
-        glGetShaderInfoLog(theShader, sizeof(eLog), NULL, eLog);
-        std::cout << "Error compiling the " << shaderType << " shader: " << eLog << std::endl;
+        GLint logLength = 0;
+        glGetShaderiv(theShader, GL_INFO_LOG_LENGTH, &logLength);
+        std::vector<GLchar> infoLog(logLength);
+        glGetShaderInfoLog(theShader, logLength, &logLength, &infoLog[0]);
+        std::cout << "Error compiling the " << shaderType << " shader: " << &infoLog[0] << std::endl;
+        glDeleteShader(theShader);
         return;
     }
 
@@ -122,52 +130,60 @@ void AddShader(GLuint theProgram, const char* shaderCode, GLenum shaderType)
 }
 
 
-void CompileShaders() 
+GLuint CompileShaders()
 {
     // Creating the program
-    hShader = glCreateProgram();
-    if (!hShader)
+    GLuint hShaderProgram = glCreateProgram();
+    if (!hShaderProgram)
     {
         std::cout << "Error creating shader program!" << std::endl;
-        return;
+        return (GLuint)NULL;
     }
 
     // Adding the shaders
-    AddShader(hShader, vShader, GL_VERTEX_SHADER);
-    AddShader(hShader, fShader, GL_FRAGMENT_SHADER);
+    AddShader(hShaderProgram, hVertexShader, GL_VERTEX_SHADER);
+    AddShader(hShaderProgram, hFragmentShader, GL_FRAGMENT_SHADER);
 
     // Validate the shader
     GLint result = 0;
-    GLchar eLog[1024] = { 0 };
+    
     // Link program on the graphics card
-    glLinkProgram(hShader);
-    glGetProgramiv(hShader, GL_LINK_STATUS, &result);
+    glLinkProgram(hShaderProgram);
+    glGetProgramiv(hShaderProgram, GL_LINK_STATUS, &result);
     if (!result)
     {
-        glGetProgramInfoLog(hShader, sizeof(eLog), NULL, eLog);
-        std::cout << "Error linking program: " << eLog << std::endl;
-        return;
+        GLint maxLength = 0;
+        glGetProgramiv(hShaderProgram, GL_INFO_LOG_LENGTH, &maxLength);
+        std::vector<GLchar> infoLog(maxLength);
+        glGetProgramInfoLog(hShaderProgram, maxLength, &maxLength, &infoLog[0]);
+        std::cout << "Error linking program: " << &infoLog[0] << std::endl;
+        glDeleteProgram(hShaderProgram);
+        return (GLuint)NULL;
     }
 
-    glValidateProgram(hShader);
-    glGetProgramiv(hShader, GL_VALIDATE_STATUS, &result);
+    glValidateProgram(hShaderProgram);
+    glGetProgramiv(hShaderProgram, GL_VALIDATE_STATUS, &result);
     if (!result)
     {
-        glGetProgramInfoLog(hShader, sizeof(eLog), NULL, eLog);
-        std::cout << "Error validating program: " << eLog << std::endl;
-        return;
+        GLint maxLength = 0;
+        glGetProgramiv(hShaderProgram, GL_INFO_LOG_LENGTH, &maxLength);
+        std::vector<GLchar> infoLog(maxLength);
+        glGetProgramInfoLog(hShaderProgram, maxLength, &maxLength, &infoLog[0]);
+        std::cout << "Error validating program: " << &infoLog[0] << std::endl;
+        glDeleteProgram(hShaderProgram);
+        return (GLuint)NULL;
     }
 
-
-    // Get a handle on the 
-    hUniformModel = glGetUniformLocation(hShader, "model");
+    // Get a handle on the uniform variable in the shader
+    hUniformModel = glGetUniformLocation(hShaderProgram, "model");
+    return hShaderProgram;
 }
 
 
 
-void DeleteShaders()
+void DeleteShaders(GLuint hShaderProgram)
 {
-    glDeleteProgram(hShader);
+    glDeleteProgram(hShaderProgram);
 }
 
 
@@ -220,7 +236,7 @@ int main()
     glViewport(0, 0, bufferWidth, bufferHeight);
 
     CreateTriangle();
-    CompileShaders();
+    GLuint hShaderProgram = CompileShaders();
 
     // Loop util window closed
     while (!glfwWindowShouldClose(mainWindow))
@@ -248,18 +264,36 @@ int main()
             curAngle -= 360.0f;
         }
 
+        if (sizeDirection)
+        {
+            curSize += 0.0001f;
+        }
+        else
+        {
+            curSize -= 0.0001f;
+        }
+        if (curSize >= maxSize || curSize <= minSize)
+        {
+            sizeDirection = !sizeDirection;
+        }
+
         // Clear Window
         glClearColor(PURE_BLACK);
         glClear(GL_COLOR_BUFFER_BIT);
 
         // Choose the program
-        glUseProgram(hShader);
+        glUseProgram(hShaderProgram);
         {
             glm::mat4 model{ 1.0f };
+            
             model = glm::translate(model, glm::vec3(triOffset, 0.0f, 0.0f));
             model = glm::rotate(model, curAngle * toRadian, glm::vec3(0.0f, 0.0f, 1.0f));
+            model = glm::scale(model, glm::vec3(curSize, curSize, 1.0f));
+            
 
-            // Pass value to the uniform variable
+            // Pass value to the uniform variable / transfer to the GPU
+            // row major order -> set transpose arg to GL_FALSE
+            // column major order -> set transpose arg to GL_TRUE
             glUniformMatrix4fv(hUniformModel, 1, GL_FALSE, glm::value_ptr(model));
 
             // Choose the vertex array
@@ -274,7 +308,7 @@ int main()
         glfwSwapBuffers(mainWindow);
     }
 
-    DeleteShaders();
+    DeleteShaders(hShaderProgram);
 
     return 0;
 }
